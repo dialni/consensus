@@ -18,7 +18,7 @@ import (
 type Server struct {
 	p.UnimplementedMessageServiceServer
 	clients    []int
-	ServerPort int
+	ServerPort int32
 }
 
 /*type Message struct {
@@ -27,26 +27,31 @@ type Server struct {
 	Process_id int
 }*/
 
+// StartDiscovery scans for other nodes on different ports from a pre-defined range and adds them to s.clients.
 func (s *Server) StartDiscovery() {
 	log.Println("Starting discovery service")
-	for i := 5001; i < 5050; i++ {
-		if i == s.ServerPort {
+	for i := 5001; i < 5010; i++ {
+		// skip our own port
+		if i == int(s.ServerPort) {
 			continue
 		}
-
+		// send message, other potential nodes have 1 second to respond. otherwise they are disregarded.
 		ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(1000))
 		resp, err := s.SendMessage(ctx, &p.Message{IsReply: false, Timestamp: 0, ProcessId: 0}, i)
-		if err != nil {
+		if err != nil || resp == nil {
 			// Port not in use or is dead
 			log.Printf("Port not in use: %d", i)
-		}
-		if resp != nil {
+			continue
+		} else if resp.IsReply == true {
 			s.clients = append(s.clients, i)
+			ctx.Done()
 			log.Printf("Port registered: %d", i)
 		}
 	}
+	log.Println("Discovery service finished, ports: ", s.clients)
 }
 
+// SendMessage starts a new client and sends our message to the selected port. returns Message.
 func (s *Server) SendMessage(ctx context.Context, in *p.Message, receivingPort int) (*p.Message, error) {
 	conn, err := grpc.NewClient(fmt.Sprintf(":%d", receivingPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -55,22 +60,27 @@ func (s *Server) SendMessage(ctx context.Context, in *p.Message, receivingPort i
 	defer conn.Close()
 
 	client := p.NewMessageServiceClient(conn)
-	//client.MessageService(ctx, in)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	return client.MessageService(ctx, in)
+	resp, _ := client.MessageService(ctx, in)
+
+	return resp, nil
+}
+
+// MessageService is the function that is run when a node receives a message from another node.
+func (s *Server) MessageService(ctx context.Context, in *p.Message) (*p.Message, error) {
+	log.Printf("Received message: %v", in.ProcessId)
+	return &p.Message{IsReply: true, Timestamp: 1, ProcessId: s.ServerPort}, nil
 }
 
 func main() {
+	// initialize server declare variables
 	s := &Server{}
 	s.ServerPort = 5000
-	//go MessageBroker(s)
 	grpcServer := grpc.NewServer()
 	var lis net.Listener
 	var err error
 
 	// Dynamically assign services to ports from 5001 to 5050
-	for i := 5001; i < 5050; i++ {
+	for i := 5001; i < 5010; i++ {
 		s.ServerPort++
 		lis, err = net.Listen("tcp", fmt.Sprintf(":%d", s.ServerPort))
 		if err != nil {
@@ -81,6 +91,7 @@ func main() {
 		}
 	}
 
+	// only 5001 is allowed to start the algorithm, others will wait until receiving the first message in StartDiscovery
 	if s.ServerPort == 5001 {
 		log.Println(" --- READY TO START NETWORK, PRESS ANY BUTTON TO CONTINUE ---")
 		log.Println(" --- THIS WILL START WITH ALL CURRENTLY READY NODES ---")
