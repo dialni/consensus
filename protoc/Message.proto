@@ -11,5 +11,5 @@ message Message {
 }
 
 service MessageService{
-  rpc MessageService(Message) returns (Message);
+  rpc MessageService(Message) returns (Message) {};
 }
