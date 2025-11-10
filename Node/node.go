@@ -15,10 +15,22 @@ import (
 	"net"
 )
 
+type ServerState int
+
+const (
+	RELEASED ServerState = iota
+	WANTED
+	HELD
+)
+
 type Server struct {
 	p.UnimplementedMessageServiceServer
-	clients    []int
-	ServerPort int32
+	clients      []int
+	ServerPort   int32
+	lTime        int64
+	MessageQueue chan p.Message
+	PriorityList []p.Message
+	ServerState  ServerState
 }
 
 /*type Message struct {
@@ -60,9 +72,9 @@ func (s *Server) SendMessage(ctx context.Context, in *p.Message, receivingPort i
 	defer conn.Close()
 
 	client := p.NewMessageServiceClient(conn)
-	resp, _ := client.MessageService(ctx, in)
+	//resp, _ := client.MessageService(ctx, in)
 
-	return resp, nil
+	return client.MessageService(ctx, in)
 }
 
 // MessageService is the function that is run when a node receives a message from another node.
@@ -71,10 +83,19 @@ func (s *Server) MessageService(ctx context.Context, in *p.Message) (*p.Message,
 	return &p.Message{IsReply: true, Timestamp: 1, ProcessId: s.ServerPort}, nil
 }
 
+// this should probably be using mutexs or some other smart way of establishing the insertion sort
+func (s *Server) ListenForMessages() {
+	s.MessageQueue = make(chan p.Message, 0)
+	var incomingMessage p.Message
+	for {
+		incomingMessage = <-s.MessageQueue
+		//s.PriorityList = EnQueue(s.PriorityList, incomingMessage)
+	}
+}
+
 func main() {
 	// initialize server declare variables
-	s := &Server{}
-	s.ServerPort = 5000
+	s := &Server{lTime: 1, clients: make([]int, 0), ServerPort: 5000, ServerState: RELEASED}
 	grpcServer := grpc.NewServer()
 	var lis net.Listener
 	var err error
