@@ -4,6 +4,7 @@ import (
 	"bufio"
 	p "consensus/protoc"
 	"fmt"
+	"math/rand"
 	"os"
 	"time"
 
@@ -29,6 +30,7 @@ type Server struct {
 	ServerPort   int32
 	lTime        int64
 	MessageQueue chan p.Message
+	ReplyQueue   chan p.Message
 	PriorityList []p.Message
 	ServerState  ServerState
 }
@@ -80,17 +82,29 @@ func (s *Server) SendMessage(ctx context.Context, in *p.Message, receivingPort i
 // MessageService is the function that is run when a node receives a message from another node.
 func (s *Server) MessageService(ctx context.Context, in *p.Message) (*p.Message, error) {
 	log.Printf("Received message: %v", in.ProcessId)
-	return &p.Message{IsReply: true, Timestamp: 1, ProcessId: s.ServerPort}, nil
+	if in.GetIsReply() {
+		return &p.Message{IsReply: true, Timestamp: 1, ProcessId: s.ServerPort}, nil
+	} else {
+		return &p.Message{IsReply: false, Timestamp: 1, ProcessId: s.ServerPort}, nil
+	}
 }
 
 // this should probably be using mutexs or some other smart way of establishing the insertion sort
-func (s *Server) ListenForMessages() {
+func (s *Server) ListenForRequests() {
 	s.MessageQueue = make(chan p.Message, 0)
 	var incomingMessage p.Message
 	for {
 		incomingMessage = <-s.MessageQueue
-		//s.PriorityList = EnQueue(s.PriorityList, incomingMessage)
+
 	}
+}
+
+func (s *Server) EnterCriticalSection() {
+
+	ctx := context.Background()
+	s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: 1, ProcessId: s.ServerPort}, 5000)
+
+	s.ServerState = RELEASED
 }
 
 func main() {
@@ -124,8 +138,29 @@ func main() {
 
 	log.Printf("Server has started, listening at %v", lis.Addr())
 	p.RegisterMessageServiceServer(grpcServer, s)
+
+	go s.Ask() //Start asking
+
 	if err = grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
-	log.Println("Server has stopped.")
+}
+
+func (s *Server) Ask() {
+	for {
+		//Ask at random intervals as long as node is not in critical section or waiting to go into it
+		delay := time.Duration(rand.Intn(1000)) * time.Millisecond
+		time.Sleep(delay)
+
+		if s.ServerState == RELEASED {
+			//Ask all ports if critical section is free
+			s.ServerState = WANTED
+			for _, client := range s.clients {
+				ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999999999999))
+				resp, _ := s.SendMessage(ctx, &p.Message{IsReply: false, Timestamp: s.lTime, ProcessId: s.ServerPort}, client)
+				s.ReplyQueue <- *resp
+			}
+			s.ServerState = HELD
+		}
+	}
 }
