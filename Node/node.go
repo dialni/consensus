@@ -32,7 +32,7 @@ type Server struct {
 	lTime         int64
 	RequestQueue  chan p.Message
 	ReplyQueue    chan p.Message
-	PriorityList  []p.Message
+	DeferredQueue []*p.Message
 	ServerState   ServerState
 }
 
@@ -47,6 +47,7 @@ func (s *Server) StartDiscovery() {
 	log.Println("Starting discovery service")
 	time.Sleep(time.Duration(500*(int(s.ServerPort)-5000)) * time.Millisecond)
 	for i := 5001; i < 5010; i++ {
+		time.Sleep(time.Duration(75) * time.Millisecond)
 		// skip our own port
 		if i == int(s.ServerPort) {
 			continue
@@ -137,6 +138,24 @@ func (s *Server) ListenForRequests() {
 			_, _ = s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, incomingMessage.ProcessId)
 		}
 	}
+}
+
+func (s *Server) RespondToDeferredMessage() {
+	// if there is no messages in queue or node is in critical zone, return
+	if len(s.DeferredQueue) == 0 || s.ServerState == HELD {
+		return
+	}
+
+	// if we have priority over lowest timestamp request, keep it deferred
+	if s.DeferredQueue[0].Timestamp > s.lTime && s.ServerState == WANTED {
+		return
+	}
+
+	// handle message
+	msg := s.DeferredQueue[0]
+	s.DeferredQueue = s.DeferredQueue[1:]
+	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999))
+	s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, msg.ProcessId)
 }
 
 func (s *Server) EnterCriticalSection() {
