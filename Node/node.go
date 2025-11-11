@@ -26,13 +26,14 @@ const (
 
 type Server struct {
 	p.UnimplementedMessageServiceServer
-	clients      []int
-	ServerPort   int32
-	lTime        int64
-	MessageQueue chan p.Message
-	ReplyQueue   chan p.Message
-	PriorityList []p.Message
-	ServerState  ServerState
+	NetworkActive bool
+	clients       []int
+	ServerPort    int32
+	lTime         int64
+	RequestQueue  chan p.Message
+	ReplyQueue    chan p.Message
+	PriorityList  []p.Message
+	ServerState   ServerState
 }
 
 /*type Message struct {
@@ -51,7 +52,7 @@ func (s *Server) StartDiscovery() {
 		}
 		// send message, other potential nodes have 1 second to respond. otherwise they are disregarded.
 		ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(1000))
-		resp, err := s.SendMessage(ctx, &p.Message{IsReply: false, Timestamp: 0, ProcessId: 0}, i)
+		resp, err := s.SendMessage(ctx, &p.Message{IsReply: false, Timestamp: 0, ProcessId: 0}, int32(i))
 		if err != nil || resp == nil {
 			// Port not in use or is dead
 			log.Printf("Port not in use: %d", i)
@@ -66,7 +67,7 @@ func (s *Server) StartDiscovery() {
 }
 
 // SendMessage starts a new client and sends our message to the selected port. returns Message.
-func (s *Server) SendMessage(ctx context.Context, in *p.Message, receivingPort int) (*p.Message, error) {
+func (s *Server) SendMessage(ctx context.Context, in *p.Message, receivingPort int32) (*p.Message, error) {
 	conn, err := grpc.NewClient(fmt.Sprintf(":%d", receivingPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("could not connect: %v", err)
@@ -91,11 +92,29 @@ func (s *Server) MessageService(ctx context.Context, in *p.Message) (*p.Message,
 
 // this should probably be using mutexs or some other smart way of establishing the insertion sort
 func (s *Server) ListenForRequests() {
-	s.MessageQueue = make(chan p.Message, 0)
+	s.RequestQueue = make(chan p.Message, 0)
 	var incomingMessage p.Message
 	for {
-		incomingMessage = <-s.MessageQueue
-
+		incomingMessage = <-s.RequestQueue
+		if s.ServerState == HELD {
+			// Defer message into sorted list
+		} else if s.ServerState == WANTED {
+			// If Message came before, give priority to Message sender
+			if incomingMessage.Timestamp > s.lTime {
+				ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999))
+				_, _ = s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, incomingMessage.ProcessId)
+			} else if incomingMessage.Timestamp == s.lTime {
+				if s.ServerPort < incomingMessage.ProcessId {
+					ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999))
+					_, _ = s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, incomingMessage.ProcessId)
+				} else {
+					// Defer message into sorted list
+				}
+			}
+		} else {
+			ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999))
+			_, _ = s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, incomingMessage.ProcessId)
+		}
 	}
 }
 
@@ -131,7 +150,7 @@ func main() {
 		log.Println(" --- READY TO START NETWORK, PRESS ANY BUTTON TO CONTINUE ---")
 		log.Println(" --- THIS WILL START WITH ALL CURRENTLY READY NODES ---")
 		bufio.NewReader(os.Stdin).ReadBytes('\n')
-		go s.StartDiscovery()
+		go s.StartDiscovery() // todo: remove this and make all nodes use StartNetwork()
 	} else {
 		log.Println(" --- WAITING FOR PORT 5001 TO START THE NETWORK ---")
 	}
@@ -146,6 +165,20 @@ func main() {
 	}
 }
 
+// StartNetwork will wait for the network to be active and then start all requests
+func (s *Server) StartNetwork() {
+	for {
+		// Keep this loop busy until our server is ready to start
+		if s.NetworkActive == true {
+			break
+		}
+		time.Sleep(time.Duration(500) * time.Millisecond)
+	}
+	s.StartDiscovery()
+	go s.ListenForRequests()
+	go s.Ask()
+}
+
 func (s *Server) Ask() {
 	for {
 		//Ask at random intervals as long as node is not in critical section or waiting to go into it
@@ -157,7 +190,7 @@ func (s *Server) Ask() {
 			s.ServerState = WANTED
 			for _, client := range s.clients {
 				ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999999999999))
-				resp, _ := s.SendMessage(ctx, &p.Message{IsReply: false, Timestamp: s.lTime, ProcessId: s.ServerPort}, client)
+				resp, _ := s.SendMessage(ctx, &p.Message{IsReply: false, Timestamp: s.lTime, ProcessId: s.ServerPort}, int32(client))
 				s.ReplyQueue <- *resp
 			}
 			s.ServerState = HELD
