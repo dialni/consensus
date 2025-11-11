@@ -24,6 +24,7 @@ const (
 // Build command:
 //
 //	protoc --go_out=. --go-grpc_out=. message.proto
+//	protoc --go_out=paths=source_relative:. --go-grpc_out=paths=source_relative:. Message.proto
 type Message struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	IsReply       bool                   `protobuf:"varint,1,opt,name=isReply,proto3" json:"isReply,omitempty"`
@@ -93,9 +94,10 @@ const file_Message_proto_rawDesc = "" +
 	"\aisReply\x18\x01 \x01(\bR\aisReply\x12\x1c\n" +
 	"\tTimestamp\x18\x02 \x01(\x03R\tTimestamp\x12\x1d\n" +
 	"\n" +
-	"Process_id\x18\x03 \x01(\x05R\tProcessId2B\n" +
-	"\x0eMessageService\x120\n" +
-	"\x0eMessageService\x12\x0e.proto.Message\x1a\x0e.proto.MessageB\x03Z\x01.b\x06proto3"
+	"Process_id\x18\x03 \x01(\x05R\tProcessId2}\n" +
+	"\x0eMessageService\x122\n" +
+	"\x0eMessageService\x12\x0e.proto.Message\x1a\x0e.proto.Message\"\x00\x127\n" +
+	"\x13StartNetworkService\x12\x0e.proto.Message\x1a\x0e.proto.Message\"\x00B\x03Z\x01.b\x06proto3"
 
 var (
 	file_Message_proto_rawDescOnce sync.Once
@@ -115,9 +117,11 @@ var file_Message_proto_goTypes = []any{
 }
 var file_Message_proto_depIdxs = []int32{
 	0, // 0: proto.MessageService.MessageService:input_type -> proto.Message
-	0, // 1: proto.MessageService.MessageService:output_type -> proto.Message
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	0, // 1: proto.MessageService.StartNetworkService:input_type -> proto.Message
+	0, // 2: proto.MessageService.MessageService:output_type -> proto.Message
+	0, // 3: proto.MessageService.StartNetworkService:output_type -> proto.Message
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
