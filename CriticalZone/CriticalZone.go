@@ -1,4 +1,4 @@
-﻿package CriticalZone
+﻿package main
 
 import (
 	"context"
@@ -25,16 +25,16 @@ type CriticalZone struct {
 func (cz *CriticalZone) MessageService(ctx context.Context, msg *p.Message) (*p.Message, error) {
 	if !cz.inUse {
 		cz.inUse = true
-		log.Println("Process", msg.ProcessId, "entered the critical section.")
+		log.Println("Process ", msg.ProcessId, " entered the critical section.")
 
 		workTime := time.Duration(1000) * time.Millisecond
 		log.Println("Process ", msg.ProcessId, " is working for ", workTime)
 		time.Sleep(workTime)
 
 		cz.inUse = false
-		log.Println("Process", msg.ProcessId, " left the critical section.")
+		log.Println("Process ", msg.ProcessId, " left the critical section.")
 	} else {
-		log.Println("Critical section is busy. Process", msg.ProcessId, " must wait.")
+		log.Println("Critical section is busy. Process ", msg.ProcessId, " must wait.")
 	}
 
 	reply := &p.Message{
