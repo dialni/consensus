@@ -112,50 +112,60 @@ func (s *Server) StartNetworkService(ctx context.Context, in *p.Message) (*p.Mes
 	return &p.Message{IsReply: true, Timestamp: 1, ProcessId: s.ServerPort}, nil
 }
 
-// this should probably be using mutexs or some other smart way of establishing the insertion sort
 func (s *Server) ListenForRequests() {
 	s.RequestQueue = make(chan p.Message, 0)
-	var incomingMessage p.Message
+	var msg p.Message
 	for {
-		incomingMessage = <-s.RequestQueue
+		s.RespondToDeferredMessage()
+		msg = <-s.RequestQueue
 		if s.ServerState == HELD {
 			// Defer message into sorted list
 		} else if s.ServerState == WANTED {
-			// If Message came before, give priority to Message sender
-			if incomingMessage.Timestamp > s.lTime {
-				ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999))
-				_, _ = s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, incomingMessage.ProcessId)
-			} else if incomingMessage.Timestamp == s.lTime {
-				if s.ServerPort < incomingMessage.ProcessId {
-					ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999))
-					_, _ = s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, incomingMessage.ProcessId)
+			// If Message has lower timestamp, give CZ priority to Message sender
+			if msg.Timestamp < s.lTime {
+				s.SendReply(&msg)
+			} else if msg.Timestamp == s.lTime {
+				if s.ServerPort < msg.ProcessId {
+					s.SendReply(&msg)
 				} else {
 					// Defer message into sorted list
 				}
+			} else {
+				// Defer message into sorted list
 			}
 		} else {
-			ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999))
-			_, _ = s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, incomingMessage.ProcessId)
+			s.SendReply(&msg)
 		}
 	}
 }
 
-func (s *Server) RespondToDeferredMessage() {
-	// if there is no messages in queue or node is in critical zone, return
-	if len(s.DeferredQueue) == 0 || s.ServerState == HELD {
-		return
+func (s *Server) SendReply(msg *p.Message) {
+	if msg.Timestamp > s.lTime {
+		s.lTime = msg.Timestamp
 	}
-
-	// if we have priority over lowest timestamp request, keep it deferred
-	if s.DeferredQueue[0].Timestamp > s.lTime && s.ServerState == WANTED {
-		return
-	}
-
-	// handle message
-	msg := s.DeferredQueue[0]
-	s.DeferredQueue = s.DeferredQueue[1:]
+	s.lTime++
 	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(9999999))
-	s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, msg.ProcessId)
+	_, _ = s.SendMessage(ctx, &p.Message{IsReply: true, Timestamp: s.lTime, ProcessId: s.ServerPort}, msg.ProcessId)
+}
+
+func (s *Server) RespondToDeferredMessage() {
+	for {
+		// if there is no messages in queue or node is in critical zone, return
+		if len(s.DeferredQueue) == 0 || s.ServerState == HELD {
+			return
+		}
+
+		// if we have priority over lowest timestamp request, keep it deferred
+		if s.DeferredQueue[0].Timestamp > s.lTime && s.ServerState == WANTED {
+			return
+		}
+
+		// remove message from deferred queue and send reply
+		msg := s.DeferredQueue[0]
+		s.DeferredQueue = s.DeferredQueue[1:]
+
+		s.SendReply(msg)
+	}
 }
 
 func (s *Server) EnterCriticalSection() {
