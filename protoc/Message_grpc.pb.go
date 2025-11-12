@@ -19,8 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MessageService_MessageService_FullMethodName      = "/proto.MessageService/MessageService"
-	MessageService_StartNetworkService_FullMethodName = "/proto.MessageService/StartNetworkService"
+	MessageService_MessageService_FullMethodName        = "/proto.MessageService/MessageService"
+	MessageService_StartDiscoveryService_FullMethodName = "/proto.MessageService/StartDiscoveryService"
+	MessageService_StartNetworkService_FullMethodName   = "/proto.MessageService/StartNetworkService"
 )
 
 // MessageServiceClient is the client API for MessageService service.
@@ -28,6 +29,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MessageServiceClient interface {
 	MessageService(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error)
+	StartDiscoveryService(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error)
 	StartNetworkService(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error)
 }
 
@@ -49,6 +51,16 @@ func (c *messageServiceClient) MessageService(ctx context.Context, in *Message, 
 	return out, nil
 }
 
+func (c *messageServiceClient) StartDiscoveryService(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Message)
+	err := c.cc.Invoke(ctx, MessageService_StartDiscoveryService_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messageServiceClient) StartNetworkService(ctx context.Context, in *Message, opts ...grpc.CallOption) (*Message, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Message)
@@ -64,6 +76,7 @@ func (c *messageServiceClient) StartNetworkService(ctx context.Context, in *Mess
 // for forward compatibility.
 type MessageServiceServer interface {
 	MessageService(context.Context, *Message) (*Message, error)
+	StartDiscoveryService(context.Context, *Message) (*Message, error)
 	StartNetworkService(context.Context, *Message) (*Message, error)
 	mustEmbedUnimplementedMessageServiceServer()
 }
@@ -77,6 +90,9 @@ type UnimplementedMessageServiceServer struct{}
 
 func (UnimplementedMessageServiceServer) MessageService(context.Context, *Message) (*Message, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MessageService not implemented")
+}
+func (UnimplementedMessageServiceServer) StartDiscoveryService(context.Context, *Message) (*Message, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartDiscoveryService not implemented")
 }
 func (UnimplementedMessageServiceServer) StartNetworkService(context.Context, *Message) (*Message, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartNetworkService not implemented")
@@ -120,6 +136,24 @@ func _MessageService_MessageService_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessageService_StartDiscoveryService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Message)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessageServiceServer).StartDiscoveryService(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessageService_StartDiscoveryService_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessageServiceServer).StartDiscoveryService(ctx, req.(*Message))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MessageService_StartNetworkService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Message)
 	if err := dec(in); err != nil {
@@ -148,6 +182,10 @@ var MessageService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MessageService",
 			Handler:    _MessageService_MessageService_Handler,
+		},
+		{
+			MethodName: "StartDiscoveryService",
+			Handler:    _MessageService_StartDiscoveryService_Handler,
 		},
 		{
 			MethodName: "StartNetworkService",

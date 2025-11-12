@@ -12,5 +12,6 @@ message Message {
 
 service MessageService{
   rpc MessageService(Message) returns (Message) {};
+  rpc StartDiscoveryService(Message) returns (Message) {};
   rpc StartNetworkService(Message) returns (Message) {};
 }
